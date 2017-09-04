@@ -10,6 +10,8 @@
     <string name="user_cancelled">User cancelled</string>
     <string name="server_mode">Server mode</string>
 
+    <string name="button_play">Play</string>
+    <string name="button_stop">Stop</string>
     <string-array name="format_options">
         <item>H264</item>
         <item>IVF</item>
