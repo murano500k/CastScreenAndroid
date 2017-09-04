@@ -162,10 +162,7 @@ static void *app_function_out (void *userdata) {
   g_main_context_push_thread_default(data->context);
 
   /* Build pipeline */
-
-
-  //data->pipeline_out = gst_parse_launch("videotestsrc ! video/x-raw, width=640, height=480, framerate=30/1 ! videoconvert ! x264enc pass=qual quantizer=20 tune=zerolatency ! rtph264pay ! udpsink port=5004", &error);
-  data->pipeline_out = gst_parse_launch("appsrc name=mysource ! ffmpegcolorspace ! videoscale method=1 ! theoraenc bitrate=150 ! videoconvert ! x264enc pass=qual quantizer=20 tune=zerolatency ! rtph264pay ! udpsink port=5004", &error);
+    data->pipeline_out = gst_parse_launch("videotestsrc ! videoconvert ! videoscale ! video/x-raw,width=1920,height=1080,framerate=30/1 ! x264enc pass=qual quantizer=20 tune=zerolatency ! rtph264pay ! multiudpsink clients=127.0.0.1:5004,172.22.89.45:5004", &error);
   if (error) {
     gchar *message = g_strdup_printf("Unable to build pipeline: %s", error->message);
     g_clear_error (&error);
@@ -218,9 +215,7 @@ static void *app_function_in (void *userdata) {
     data->context = g_main_context_new ();
     g_main_context_push_thread_default(data->context);
 
-    /* Build pipeline */
-    data->pipeline_in = gst_parse_launch("udpsrc port=5004 ! application/x-rtp,payload=127 ! rtph264depay ! avdec_h264 ! videoconvert  ! autovideosync sync=false", &error);
-    //data->pipeline_in = gst_parse_launch("udpsrc port=5004 ! application/x-rtp, payload=127 ! rtph264depay ! avdec_h264 ! videoconvert  ! autovideosink", &error);
+    data->pipeline_in = gst_parse_launch("udpsrc port=5004 ! application/x-rtp, payload=127 ! rtph264depay ! avdec_h264 ! videoconvert  ! autovideosink", &error);
 
     if (error) {
         gchar *message = g_strdup_printf("Unable to build pipeline: %s", error->message);
@@ -280,7 +275,7 @@ static void gst_native_init (JNIEnv* env, jobject thiz) {
   GST_DEBUG ("Created CustomData at %p", data);
   data->app = (*env)->NewGlobalRef (env, thiz);
   GST_DEBUG ("Created GlobalRef for app object at %p", data->app);
-  //pthread_create (&gst_app_thread_out, NULL, &app_function_out, data);
+  pthread_create (&gst_app_thread_out, NULL, &app_function_out, data);
   pthread_create (&gst_app_thread_in, NULL, &app_function_in, data);
 }
 
@@ -306,7 +301,7 @@ static void gst_native_play (JNIEnv* env, jobject thiz) {
   CustomData *data = GET_CUSTOM_DATA (env, thiz, custom_data_field_id);
   if (!data) return;
   GST_DEBUG ("Setting state to PLAYING");
-  //gst_element_set_state (data->pipeline_out, GST_STATE_PLAYING);
+  gst_element_set_state (data->pipeline_out, GST_STATE_PLAYING);
   gst_element_set_state (data->pipeline_in, GST_STATE_PLAYING);
 }
 
@@ -315,7 +310,7 @@ static void gst_native_pause (JNIEnv* env, jobject thiz) {
   CustomData *data = GET_CUSTOM_DATA (env, thiz, custom_data_field_id);
   if (!data) return;
   GST_DEBUG ("Setting state to PAUSED");
-  //gst_element_set_state (data->pipeline_out, GST_STATE_PAUSED);
+  gst_element_set_state (data->pipeline_out, GST_STATE_PAUSED);
   gst_element_set_state (data->pipeline_in, GST_STATE_PAUSED);
 }
 
