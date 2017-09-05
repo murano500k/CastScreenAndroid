@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.yschi.castscreen;
+package android.renesas.castscreendemo;
 
 import android.media.MediaFormat;
 
@@ -49,5 +49,5 @@ public class Common {
     public static final String EXTRA_VIDEO_FORMAT = "video_format";
     public static final String EXTRA_VIDEO_BITRATE = "video_bitrate";
 
-    public static final String ACTION_STOP_CAST = "com.yschi.castscreen.ACTION_STOP_CAST";
+    public static final String ACTION_STOP_CAST = "android.renesas.castscreendemo.ACTION_STOP_CAST";
 }

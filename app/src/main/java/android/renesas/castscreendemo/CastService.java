@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.yschi.castscreen;
+package android.renesas.castscreendemo;
 
 import android.app.Notification;
 import android.app.NotificationManager;

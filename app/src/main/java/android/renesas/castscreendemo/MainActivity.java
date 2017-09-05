@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.yschi.castscreen;
+package android.renesas.castscreendemo;
 
 import android.app.Activity;
 import android.content.ComponentName;
