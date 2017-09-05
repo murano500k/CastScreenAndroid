@@ -13,6 +13,11 @@ android {
         externalNativeBuild {
             ndkBuild {
                 abiFilters "arm64-v8a"
+                arguments "APP_STL=gnustl_static"
+                arguments "ANDROID_PLATFORM=android-26"
+                targets "tutorial-2"
+                arguments "NDK_TOOLCHAIN_VERSION=clang"
+                cppFlags "-DHAVE_SYS_UIO_H -std=c++11"
             }
         }
     }

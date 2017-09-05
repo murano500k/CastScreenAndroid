@@ -9,6 +9,7 @@
 
 #include <pthread.h>
 
+
 GST_DEBUG_CATEGORY_STATIC (debug_category);
 #define GST_CAT_DEFAULT debug_category
 
@@ -111,7 +112,7 @@ static void error_cb (GstBus *bus, GstMessage *msg, CustomData *data) {
   set_ui_message (message_string, data);
   g_free (message_string);
   gst_element_set_state (data->pipeline_in, GST_STATE_NULL);
-  //gst_element_set_state (data->pipeline_out, GST_STATE_NULL);
+  gst_element_set_state (data->pipeline_out, GST_STATE_NULL);
 }
 
 /* Notify UI about pipeline state changes */
@@ -121,7 +122,7 @@ static void state_changed_cb (GstBus *bus, GstMessage *msg, CustomData *data) {
   /* Only pay attention to messages coming from the pipeline, not its children */
     GST_DEBUG ("got message %s",
                gst_message_type_get_name (GST_MESSAGE_TYPE (msg)));
-  if (GST_MESSAGE_SRC (msg) == GST_OBJECT (data->pipeline_in) ) {
+  if (GST_MESSAGE_SRC (msg) == GST_OBJECT (data->pipeline_out) ) {
     gchar *message = g_strdup_printf("State changed to %s", gst_element_state_get_name(new_state));
     set_ui_message(message, data);
     g_free (message);
@@ -148,7 +149,7 @@ static void check_initialization_complete (CustomData *data) {
 }
 
 /* Main method for the native code. This is executed on its own thread. */
-static void *app_function_out (void *userdata) {
+/*static void *app_function_out (void *userdata) {
   JavaVMAttachArgs args;
   GstBus *bus;
   CustomData *data = (CustomData *)userdata;
@@ -157,12 +158,12 @@ static void *app_function_out (void *userdata) {
 
   GST_DEBUG ("Creating pipeline in CustomData at %p", data);
 
-  /* Create our own GLib Main Context and make it the default one */
+  *//* Create our own GLib Main Context and make it the default one *//*
   data->context = g_main_context_new ();
   g_main_context_push_thread_default(data->context);
 
-  /* Build pipeline */
-    data->pipeline_out = gst_parse_launch("videotestsrc ! videoconvert ! videoscale ! video/x-raw,width=1920,height=1080,framerate=30/1 ! x264enc pass=qual quantizer=20 tune=zerolatency ! rtph264pay ! multiudpsink clients=127.0.0.1:5004,172.22.89.45:5004", &error);
+  *//* Build pipeline *//*
+    data->pipeline_out = gst_parse_launch("ahcsrc ! videoconvert ! videoscale ! video/x-raw,width=1920,height=1080,framerate=30/1 ! x264enc pass=qual quantizer=20 tune=zerolatency ! rtph264pay ! multiudpsink clients=127.0.0.1:5004,172.22.89.45:5004", &error);
   if (error) {
     gchar *message = g_strdup_printf("Unable to build pipeline: %s", error->message);
     g_clear_error (&error);
@@ -171,20 +172,13 @@ static void *app_function_out (void *userdata) {
     return NULL;
   }
 
-  /* Set the pipeline to READY, so it can already accept a window handle, if we have one */
+  *//* Set the pipeline to READY, so it can already accept a window handle, if we have one *//*
   gst_element_set_state(data->pipeline_out, GST_STATE_READY);
-
-  /* Instruct the bus to emit signals for each received message, and connect to the interesting signals */
-  bus = gst_element_get_bus (data->pipeline_out);
-  bus_source = gst_bus_create_watch (bus);
-  g_source_set_callback (bus_source, (GSourceFunc) gst_bus_async_signal_func, NULL, NULL);
-  g_source_attach (bus_source, data->context);
-  g_source_unref (bus_source);
   g_signal_connect (G_OBJECT (bus), "message::error", (GCallback)error_cb, data);
   g_signal_connect (G_OBJECT (bus), "message::state-changed", (GCallback)state_changed_cb, data);
   gst_object_unref (bus);
 
-  /* Create a GLib Main Loop and set it to run */
+  *//* Create a GLib Main Loop and set it to run *//*
   GST_DEBUG ("Entering main loop... (CustomData:%p)", data);
   data->main_loop = g_main_loop_new (data->context, FALSE);
   check_initialization_complete (data);
@@ -193,14 +187,100 @@ static void *app_function_out (void *userdata) {
   g_main_loop_unref (data->main_loop);
   data->main_loop = NULL;
 
-  /* Free resources */
+  *//* Free resources *//*
   g_main_context_pop_thread_default(data->context);
   g_main_context_unref (data->context);
   gst_element_set_state (data->pipeline_out, GST_STATE_NULL);
   gst_object_unref (data->pipeline_out);
 
   return NULL;
+}*/
+static void cb_need_data (GstElement *appsrc,
+                          guint       unused_size,
+                          gpointer    user_data)
+{
+    CustomData *data = (CustomData *)user_data;
+    static gboolean white = FALSE;
+    static GstClockTime timestamp = 0;
+    GstBuffer *buffer;
+    guint size;
+    GstFlowReturn ret;
+
+    size = 385 * 288 * 2;
+
+    buffer = gst_buffer_new_allocate (NULL, size, NULL);
+
+    /* this makes the image black/white */
+    gst_buffer_memset (buffer, 0, white ? 0xff : 0x0, size);
+
+    white = !white;
+
+    GST_BUFFER_PTS (buffer) = timestamp;
+    GST_BUFFER_DURATION (buffer) = gst_util_uint64_scale_int (1, GST_SECOND, 2);
+
+    timestamp += GST_BUFFER_DURATION (buffer);
+
+    g_signal_emit_by_name (appsrc, "push-buffer", buffer, &ret);
+    gst_buffer_unref (buffer);
+
+    if (ret != GST_FLOW_OK) {
+        /* something wrong, stop pushing */
+        g_main_loop_quit (data->main_loop);
+    }
 }
+
+
+static void *app_function_out (void *userdata) {
+    JavaVMAttachArgs args;
+    GstBus *bus;
+    CustomData *data = (CustomData *)userdata;
+    GSource *bus_source;
+    GError *error = NULL;
+
+    GST_DEBUG ("Creating pipeline in CustomData at %p", data);
+
+    data->context = g_main_context_new ();
+    g_main_context_push_thread_default(data->context);
+
+
+
+    data->pipeline_out = gst_parse_launch("appsrc ! videoconvert ! videoscale ! video/x-raw,width=1920,height=1080,framerate=30/1 ! x264enc pass=qual quantizer=20 tune=zerolatency ! rtph264pay ! multiudpsink clients=127.0.0.1:5004,172.22.89.45:5004", &error);
+    if (error) {
+        gchar *message = g_strdup_printf("Unable to build pipeline: %s", error->message);
+        g_clear_error (&error);
+        set_ui_message(message, data);
+        g_free (message);
+        return NULL;
+    }
+
+    /* setup appsrc */
+    g_object_set (data->pipeline_out,
+                  "stream-type", 0,
+                  "format", GST_FORMAT_TIME, NULL);
+
+    g_signal_connect (data->pipeline_out, "need-data", G_CALLBACK (cb_need_data), NULL);
+
+    /* play */
+    gst_element_set_state (data->pipeline_out, GST_STATE_PLAYING);
+
+    /* Create a GLib Main Loop and set it to run */
+    GST_DEBUG ("Entering main loop... (CustomData:%p)", data);
+    data->main_loop = g_main_loop_new (data->context, FALSE);
+    check_initialization_complete (data);
+    g_main_loop_run (data->main_loop);
+    GST_DEBUG ("Exited main loop");
+    g_main_loop_unref (data->main_loop);
+    data->main_loop = NULL;
+
+    /* Free resources */
+    g_main_context_pop_thread_default(data->context);
+    g_main_context_unref (data->context);
+    gst_element_set_state (data->pipeline_out, GST_STATE_NULL);
+    gst_object_unref (data->pipeline_out);
+    return NULL;
+
+}
+
 
 static void *app_function_in (void *userdata) {
     JavaVMAttachArgs args;
@@ -215,8 +295,8 @@ static void *app_function_in (void *userdata) {
     data->context = g_main_context_new ();
     g_main_context_push_thread_default(data->context);
 
-    data->pipeline_in = gst_parse_launch("udpsrc port=5004 ! application/x-rtp, payload=127 ! rtph264depay ! avdec_h264 ! videoconvert  ! autovideosink", &error);
-
+    //data->pipeline_in = gst_parse_launch("udpsrc port=5004 ! application/x-rtp, payload=127 ! rtph264depay ! avdec_h264 ! videoconvert  ! autovideosink", &error);
+    data->pipeline_in = gst_parse_launch("udpsrc port=5004 ! application/x-rtp, payload=127 ! autovideosink", &error);
     if (error) {
         gchar *message = g_strdup_printf("Unable to build pipeline: %s", error->message);
         g_clear_error (&error);
@@ -262,22 +342,10 @@ static void *app_function_in (void *userdata) {
 
     return NULL;
 }
-/*
- * Java Bindings
- */
 
-/* Instruct the native code to create its internal data structure, pipeline and thread */
-static void gst_native_init (JNIEnv* env, jobject thiz) {
-  CustomData *data = g_new0 (CustomData, 1);
-  SET_CUSTOM_DATA (env, thiz, custom_data_field_id, data);
-  GST_DEBUG_CATEGORY_INIT (debug_category, "tutorial-2", 0, "Android tutorial 2");
-  gst_debug_set_threshold_for_name("tutorial-2", GST_LEVEL_DEBUG);
-  GST_DEBUG ("Created CustomData at %p", data);
-  data->app = (*env)->NewGlobalRef (env, thiz);
-  GST_DEBUG ("Created GlobalRef for app object at %p", data->app);
-  pthread_create (&gst_app_thread_out, NULL, &app_function_out, data);
-  pthread_create (&gst_app_thread_in, NULL, &app_function_in, data);
-}
+
+
+
 
 /* Quit the main loop, remove the native thread and free resources */
 static void gst_native_finalize (JNIEnv* env, jobject thiz) {
@@ -369,6 +437,19 @@ static void gst_native_surface_finalize (JNIEnv *env, jobject thiz) {
   data->initialized = FALSE;
 }
 
+/* Instruct the native code to create its internal data structure, pipeline and thread */
+static void gst_native_init (JNIEnv* env, jobject thiz) {
+    CustomData *data = g_new0 (CustomData, 1);
+    SET_CUSTOM_DATA (env, thiz, custom_data_field_id, data);
+    GST_DEBUG_CATEGORY_INIT (debug_category, "tutorial-2", 0, "Android tutorial 2");
+    gst_debug_set_threshold_for_name("tutorial-2", GST_LEVEL_DEBUG);
+    GST_DEBUG ("Created CustomData at %p", data);
+    data->app = (*env)->NewGlobalRef (env, thiz);
+    GST_DEBUG ("Created GlobalRef for app object at %p", data->app);
+    //pthread_create (&gst_app_thread_out, NULL, &app_function_out, data);
+    pthread_create (&gst_app_thread_in, NULL, &app_function_in, data);
+}
+
 /* List of implemented native methods */
 static JNINativeMethod native_methods[] = {
         { "nativeInit", "()V", (void *) gst_native_init},
@@ -393,9 +474,7 @@ jint JNI_OnLoad(JavaVM *vm, void *reserved) {
   }
   jclass klass = (*env)->FindClass (env, "com/yschi/castscreen/Tutorial2");
   (*env)->RegisterNatives (env, klass, native_methods, G_N_ELEMENTS(native_methods));
-
-  pthread_key_create (&current_jni_env, detach_current_thread);
+    pthread_key_create (&current_jni_env, detach_current_thread);
 
   return JNI_VERSION_1_4;
 }
-

@@ -433,7 +433,7 @@ public class MainActivity extends Activity {
                         Log.d(TAG, "Receive discover response from " + ip + ", length: " + receivePacket.getLength());
                         if (receivePacket.getLength() > 9) {
                             String respMsg = new String(receivePacket.getData());
-                            Log.d(TAG, "Discover response message: " + respMsg);
+                            //Log.d(TAG, "Discover response message: " + respMsg);
                             try {
                                 JSONObject json = new JSONObject(respMsg);
                                 String name = json.getString("name");

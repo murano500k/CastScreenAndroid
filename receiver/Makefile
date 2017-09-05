@@ -1,4 +1,4 @@
-all: cs_receiver cs_receiver_conn cs_receiver_arm cs_receiver_conn_arm
+all: cs_receiver cs_receiver_conn 
 
 cs_receiver: cs_receiver.c
 	gcc -o $@ $< $(LIBS)

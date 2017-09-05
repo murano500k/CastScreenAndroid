@@ -290,14 +290,15 @@ public class CastService extends Service {
         int frameRate = Common.DEFAULT_VIDEO_FPS;
 
         // Set some required properties. The media codec may fail if these aren't defined.
-        format.setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface);
-        //format.setInteger(MediaFormat.KEY_COLOR_FORMAT, /*MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420Flexible*/ 21);
+        //format.setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface);
+        format.setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420Planar);
         format.setInteger(MediaFormat.KEY_BIT_RATE, mSelectedBitrate);
         format.setInteger(MediaFormat.KEY_FRAME_RATE, frameRate);
         format.setInteger(MediaFormat.KEY_CAPTURE_RATE, frameRate);
         format.setInteger(MediaFormat.KEY_REPEAT_PREVIOUS_FRAME_AFTER, 1000000 / frameRate);
         format.setInteger(MediaFormat.KEY_CHANNEL_COUNT, 1);
         format.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 1); // 1 seconds between I-frames
+
 
         // Create a MediaCodec encoder and configure it. Get a Surface we can use for recording into.
         try {
@@ -306,7 +307,9 @@ public class CastService extends Service {
                 Log.w(TAG, "no codecs for track ");
             }
             for (String codecName : matchingCodecs){
-                if(codecName.toLowerCase().contains("google")) {
+                Log.d(TAG, "prepareVideoEncoder() called "+ codecName);
+                if(codecName.toLowerCase().contains("encoder") ||
+                        codecName.toLowerCase().contains("renesas")) {
                     Log.w(TAG, "prepareVideoEncoder: "+codecName );
                     mVideoEncoder = MediaCodec.createByCodecName(codecName);
                     break;
@@ -324,6 +327,7 @@ public class CastService extends Service {
     }
 
     private ArrayList<String> getCodecs(MediaFormat format){
+        Log.d(TAG, "getCodecs() called with: format = [" + format + "]");
         // find all the available decoders for this format
         ArrayList<String> matchingCodecs = new ArrayList<String>();
         String mime = format.getString(MediaFormat.KEY_MIME);
@@ -335,6 +339,7 @@ public class CastService extends Service {
             }
             try {
                 MediaCodecInfo.CodecCapabilities caps = info.getCapabilitiesForType(mime);
+                Log.w(TAG, "getCodecs: "+info.getName() );
                 if (caps != null) {
                     matchingCodecs.add(info.getName());
                 }
@@ -363,11 +368,9 @@ public class CastService extends Service {
                 if (encodedData == null) {
                     throw new RuntimeException("couldn't fetch buffer at index " + bufferIndex);
                 }
-                // Fixes playability issues on certain h264 decoders including omxh264dec on raspberry pi
-                // See http://stackoverflow.com/a/26684736/4683709 for explanation
-                //if ((mVideoBufferInfo.flags & MediaCodec.BUFFER_FLAG_CODEC_CONFIG) != 0) {
-                //    mVideoBufferInfo.size = 0;
-                //}
+                if ((mVideoBufferInfo.flags & MediaCodec.BUFFER_FLAG_CODEC_CONFIG) != 0) {
+                    mVideoBufferInfo.size = 0;
+                }
 
                 Log.d(TAG, "Video buffer offset: " + mVideoBufferInfo.offset + ", size: " + mVideoBufferInfo.size);
                 if (mVideoBufferInfo.size != 0) {
@@ -381,6 +384,7 @@ public class CastService extends Service {
                             if (mIvfWriter != null) {
                                 mIvfWriter.writeFrame(b, mVideoBufferInfo.presentationTimeUs);
                             } else {
+                                Log.d(TAG, "drainEncoder: no ivf");
                                 mSocketOutputStream.write(b);
                             }
                         } catch (IOException e) {
