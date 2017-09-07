@@ -578,7 +578,7 @@ public class CastService extends Service {
                     osw.write(String.format(HTTP_MESSAGE_TEMPLATE, mSelectedWidth, mSelectedHeight));
                     osw.flush();
                     mSocketOutputStream.flush();
-                    /*if (mSelectedFormat.equals(MediaFormat.MIMETYPE_VIDEO_AVC)) {
+                    if (mSelectedFormat.equals(MediaFormat.MIMETYPE_VIDEO_AVC)) {
                         if (mSelectedWidth == 1280 && mSelectedHeight == 720) {
                             mSocketOutputStream.write(H264_PREDEFINED_HEADER_1280x720);
                         } else if (mSelectedWidth == 800 && mSelectedHeight == 480) {
@@ -599,7 +599,7 @@ public class CastService extends Service {
                         mClientSocket.close();
                         mClientSocket = null;
                         mSocketOutputStream = null;
-                    }*/
+                    }
                     if (mSocketOutputStream != null) {
                         mHandler.post(mStartEncodingRunnable);
                     }
