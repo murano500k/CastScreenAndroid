@@ -25,7 +25,7 @@ import SocketServer
 
 HOST = ''
 PORT = 53515
-IP = '192.168.0.11'
+IP = '172.22.89.45'
 
 bufferSize = 1024
 meta_data = '{"port":%d,"name":"PyReceiver @ %s","id":"%s","width":1280,"height":960,"mirror":"h264","audio":"pcm","subtitles":"text/vtt","proxyHeaders":true,"hls":false,"upsell":true}' % (PORT, IP, IP)
@@ -35,8 +35,8 @@ class MyTCPHandler(SocketServer.BaseRequestHandler):
     def handle(self):
 	if SAVE_TO_FILE:
             f = open('video.raw', 'wb')
-        #p = Popen(['ffplay', '-framerate', '30', '-'], stdin=PIPE, stdout=PIPE)
-        p = Popen(['gst-launch-1.0', 'fdsrc', '!', 'h264parse', '!', 'avdec_h264', '!', 'autovideosink'], stdin=PIPE, stdout=PIPE)
+        p = Popen(['ffplay', '-framerate', '30', '-'], stdin=PIPE, stdout=PIPE)
+        #p = Popen(['gst-launch-1.0', 'fdsrc', '!', 'h264parse', '!', 'avdec_h264', '!', 'autovideosink'], stdin=PIPE, stdout=PIPE)
         skiped_metadata = False
         while True:
             data = self.request.recv(bufferSize)

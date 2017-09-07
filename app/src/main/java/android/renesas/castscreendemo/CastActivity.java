@@ -55,7 +55,7 @@ import java.util.Arrays;
 import java.util.HashMap;
 
 
-public class MainActivity extends Activity {
+public class CastActivity extends Activity {
     private static final String TAG = "MainActivity";
 
     private static final String PREF_COMMON = "common";
@@ -139,7 +139,7 @@ public class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        setContentView(R.layout.activity_main);
+        setContentView(R.layout.activity_cast);
 
         if (savedInstanceState != null) {
             mResultCode = savedInstanceState.getInt(STATE_RESULT_CODE);
@@ -251,6 +251,8 @@ public class MainActivity extends Activity {
             }
         });
         bitrateSpinner.setSelection(mContext.getSharedPreferences(PREF_COMMON, 0).getInt(PREF_KEY_BITRATE, 0));
+
+
 
         mReceiverIp = mContext.getSharedPreferences(PREF_COMMON, 0).getString(PREF_KEY_RECEIVER, "");
         updateReceiverStatus();

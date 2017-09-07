@@ -17,13 +17,20 @@
 package android.renesas.castscreendemo;
 
 import android.content.Context;
+import android.media.MediaCodecInfo;
+import android.media.MediaCodecList;
+import android.media.MediaFormat;
 import android.net.DhcpInfo;
 import android.net.wifi.WifiManager;
+import android.util.Log;
 
 import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
+import java.util.ArrayList;
+
+import static android.content.ContentValues.TAG;
 
 /**
  * Created by yschi on 2015/5/27.
@@ -61,5 +68,54 @@ public class Utils {
         }
         return false;
     }
+    public static ArrayList<String> getCodecs(MediaFormat format){
+        Log.d(TAG, "getCodecs() called with: format = [" + format + "]");
+        // find all the available decoders for this format
+        ArrayList<String> matchingCodecs = new ArrayList<String>();
+        String mime = format.getString(MediaFormat.KEY_MIME);
+        int numCodecs = MediaCodecList.getCodecCount();
+        for (int i = 0; i < numCodecs; i++) {
+            MediaCodecInfo info = MediaCodecList.getCodecInfoAt(i);
+            if (!info.isEncoder()) {
+                continue;
+            }
+            try {
+                MediaCodecInfo.CodecCapabilities caps = info.getCapabilitiesForType(mime);
+                Log.w(TAG, "getCodecs: "+info.getName() );
+                if (caps != null) {
+                    matchingCodecs.add(info.getName());
+                }
+            } catch (IllegalArgumentException e) {
+                // type is not supported
+                //Log.e(TAG, "getCodecs: ",e );
+            }
+        }
+        return matchingCodecs;
+    }
+    public static String getEncoderName(MediaFormat format){
+        String codecName="";
+        ArrayList<String> matchingCodecs = getCodecs(format);
+        if (matchingCodecs.size() == 0) {
+            Log.w(TAG, "no codecs for track ");
+        }
+        if(matchingCodecs.size() == 1){
+            codecName=matchingCodecs.get(0);
 
+        }else {
+            String match="";
+            for (String codec : matchingCodecs) match+=codec+" ";
+            Log.d(TAG, "matchingCodecs { "+match+" }");
+
+
+            for (String codec : matchingCodecs) {
+                if (codec.toLowerCase().contains("encoder")) {
+                    if(codec.toLowerCase().contains("renesas")) continue;
+                    codecName=codec;
+                    break;
+                }
+            }
+        }
+        Log.w(TAG, "getEncoderName: "+codecName );
+        return codecName;
+    }
 }
