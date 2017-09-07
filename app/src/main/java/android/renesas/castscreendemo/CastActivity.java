@@ -56,7 +56,7 @@ import java.util.HashMap;
 
 
 public class CastActivity extends Activity {
-    private static final String TAG = "MainActivity";
+    private static final String TAG = "CastActivity";
 
     private static final String PREF_COMMON = "common";
     private static final String PREF_KEY_INPUT_RECEIVER = "input_receiver";

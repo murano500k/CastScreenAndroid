@@ -14,14 +14,13 @@
  * limitations under the License.
  */
 
-package pavelm.android.displaycast;
+package android.renesas.castscreendemo;
 
 import android.app.Presentation;
 import android.content.Context;
 import android.opengl.GLSurfaceView;
 import android.opengl.GLU;
 import android.os.Bundle;
-import android.renesas.castscreendemo.R;
 import android.util.AttributeSet;
 import android.util.DisplayMetrics;
 import android.util.Log;
@@ -41,7 +40,7 @@ import javax.microedition.khronos.opengles.GL10;
  */
 class DummyPresentation extends Presentation {
 
-    private final static String TAG = MainActivity.TAG;
+    private final static String TAG = "DummyPresentation";
 
     private DisplayMetrics mDisplayMetrics = new DisplayMetrics();
     private MyGLSurfaceView mGlView;

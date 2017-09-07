@@ -1,0 +1,18 @@
+gst-launch-1.0 udpsrc port=5005 ! \
+application/x-rtp,media=video,clock-rate=90000,encoding-name=H264 ! \
+rtpjitterbuffer latency-0 ! \
+rtph264depay ! h264parse config-interval=1 disable-passthrough=true ! \
+imxh264dec no-reorder=true ! \
+waylandsink
+
+
+
+gst-launch-1.0 udpsrc port=5005 ! \
+application/x-rtp,media=video,clock-rate=90000,encoding-name=H264 ! \
+rtpjitterbuffer latency=0 ! \
+rtph264depay ! \
+h264parse config-interval=1 disable-passthrough=true ! \
+avdec_h264 no-reorder=true ! \
+ximagesink
+
+p = Popen(['gst-launch-1.0', 'fdsrc', '!', 'application/x-rtp,media=video,clock-rate=90000,encoding-name=H264', '!', 'rtpjitterbuffer latency=0', '!', 'rtph264depay', '!', 'h264parse config-interval=1 disable-passthrough=true', '!', 'avdec_h264  no-reorder=true', '!', 'ximagesink'], stdin=PIPE, stdout=PIPE)

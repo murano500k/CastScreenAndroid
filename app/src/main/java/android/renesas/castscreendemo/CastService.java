@@ -24,10 +24,10 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.hardware.display.DisplayManager;
 import android.hardware.display.VirtualDisplay;
 import android.media.MediaCodec;
 import android.media.MediaCodecInfo;
-import android.media.MediaCodecList;
 import android.media.MediaFormat;
 import android.media.projection.MediaProjection;
 import android.media.projection.MediaProjectionManager;
@@ -37,6 +37,7 @@ import android.os.Message;
 import android.os.Messenger;
 import android.os.StrictMode;
 import android.util.Log;
+import android.view.Display;
 import android.view.Surface;
 
 import java.io.BufferedReader;
@@ -51,19 +52,24 @@ import java.net.UnknownHostException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 
+import static android.renesas.castscreendemo.Common.DISPLAY_NAME;
+
 public class CastService extends Service {
-    private final String TAG = "CastService";
     private final int NT_ID_CASTING = 0;
+
+    private final String TAG = "CastService";
+    private DisplayManager mDisplayManager;
+
     private Handler mHandler = new Handler(new ServiceHandlerCallback());
     private Messenger mMessenger = new Messenger(mHandler);
     private ArrayList<Messenger> mClients = new ArrayList<Messenger>();
     private IntentFilter mBroadcastIntentFilter;
 
     private static final String HTTP_MESSAGE_TEMPLATE = "POST /api/v1/h264 HTTP/1.1\r\n" +
-                                                        "Connection: close\r\n" +
-                                                        "X-WIDTH: %1$d\r\n" +
-                                                        "X-HEIGHT: %2$d\r\n" +
-                                                        "\r\n";
+            "Connection: close\r\n" +
+            "X-WIDTH: %1$d\r\n" +
+            "X-HEIGHT: %2$d\r\n" +
+            "\r\n";
 
     // 1280x720@25
     private static final byte[] H264_PREDEFINED_HEADER_1280x720 = {
@@ -104,6 +110,7 @@ public class CastService extends Service {
     private Socket mSocket;
     private OutputStream mSocketOutputStream;
     private IvfWriter mIvfWriter;
+    private DummyPresentation mPresentation;
     private Handler mDrainHandler = new Handler();
     private Runnable mStartEncodingRunnable = new Runnable() {
         @Override
@@ -162,6 +169,8 @@ public class CastService extends Service {
     @Override
     public void onCreate() {
         super.onCreate();
+        mDisplayManager = getSystemService(DisplayManager.class);
+
         StrictMode.ThreadPolicy policy = new StrictMode.ThreadPolicy.Builder().permitAll().build();
 
         StrictMode.setThreadPolicy(policy);
@@ -253,7 +262,7 @@ public class CastService extends Service {
         Log.d(TAG, "mResultCode: " + mResultCode + ", mResultData: " + mResultData);
         if (mResultCode != 0 && mResultData != null) {
             setUpMediaProjection();
-            startRecording();
+            createDummyDisplay();
             showNotification();
             return true;
         }
@@ -264,24 +273,69 @@ public class CastService extends Service {
         mMediaProjection = mMediaProjectionManager.getMediaProjection(mResultCode, mResultData);
     }
 
-    private void startRecording() {
-        Log.d(TAG, "startRecording");
-        prepareVideoEncoder();
+    private void createDummyDisplay() {
+        Log.d(TAG, "createDummyDisplay");
+        prepareGoogleVideoEncoder();
+        mVirtualDisplay = mDisplayManager.createVirtualDisplay(DISPLAY_NAME, mSelectedWidth, mSelectedHeight, mSelectedDpi,
+                mInputSurface, 0 /* flags */, new VirtualDisplay.Callback() {
+                    @Override
+                    public void onResumed() {
+                        Log.i(TAG, "VirtualDisplay resumed");
+                    }
 
-        //try {
-        //    mMuxer = new MediaMuxer("/sdcard/video.mp4", MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4);
-        //} catch (IOException ioe) {
-        //    throw new RuntimeException("MediaMuxer creation failed", ioe);
-        //}
+                    @Override
+                    public void onPaused() {
+                        Log.i(TAG, "VirtualDisplay paused");
+                    }
 
-        // Start the video input.
-        mVirtualDisplay = mMediaProjection.createVirtualDisplay("Recording Display", mSelectedWidth,
-                mSelectedHeight, mSelectedDpi, 0 /* flags */, mInputSurface,
-                null /* callback */, null /* handler */);
+                    @Override
+                    public void onStopped() {
+                        Log.i(TAG, "VirtualDisplay stopped");
+                    }
+                }, null /* handler */);
+        mDisplayManager.registerDisplayListener(new DisplayManager.DisplayListener() {
+            @Override
+            public void onDisplayAdded(int i) {
+                final Display display = mDisplayManager.getDisplay(i);
+                if (display != null && DISPLAY_NAME.equals(display.getName())) {
+                    onVirtualDisplayReady(display);
+                }
+            }
+
+            @Override public void onDisplayRemoved(int i) {}
+
+            @Override public void onDisplayChanged(int i) {}
+        }, new Handler());
+        /*mVirtualDisplay = mMediaProjection.createVirtualDisplay("Recording Display", mSelectedWidth,
+                mSelectedHeight, mSelectedDpi, 0 , mInputSurface,
+                new VirtualDisplay.Callback() {
+                    @Override
+                    public void onResumed() {
+                        Log.i(TAG, "VirtualDisplay resumed");
+                    }
+
+                    @Override
+                    public void onPaused() {
+                        Log.i(TAG, "VirtualDisplay paused");
+                    }
+
+                    @Override
+                    public void onStopped() {
+                        Log.i(TAG, "VirtualDisplay stopped");
+                    }
+                } , null );*/
 
         // Start the encoders
         mDrainEncoderRunnable.run();
         //drainEncoder();
+    }
+    private void onVirtualDisplayReady(Display display) {
+        Log.w(TAG, "Background virtual display ready");
+        // We can just run an activity instead since Android O.
+        // See ActivityOptions.setLaunchDisplayId
+        mPresentation = new DummyPresentation(this, display);
+        mPresentation.show();
+        Log.w(TAG, "Presentation ready");
     }
 
     private void prepareVideoEncoder() {
@@ -303,7 +357,7 @@ public class CastService extends Service {
 
         // Create a MediaCodec encoder and configure it. Get a Surface we can use for recording into.
         try {
-            ArrayList<String> matchingCodecs = getCodecs(format);
+            ArrayList<String> matchingCodecs = Utils.getCodecs(format);
             if (matchingCodecs.size() == 0) {
                 Log.w(TAG, "no codecs for track ");
             }
@@ -325,6 +379,7 @@ public class CastService extends Service {
                     }
                 }
             }
+            mVideoEncoder = MediaCodec.createByCodecName(Utils.getEncoderName(format));
 
             //mVideoEncoder = MediaCodec.createEncoderByType(mSelectedFormat);
             mVideoEncoder.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
@@ -335,33 +390,30 @@ public class CastService extends Service {
             releaseEncoders();
         }
     }
-    void configureEncoderPixel(){
 
-    }
+    private void prepareGoogleVideoEncoder() {
+        mVideoBufferInfo = new MediaCodec.BufferInfo();
+        MediaFormat format = MediaFormat.createVideoFormat(mSelectedFormat, mSelectedWidth, mSelectedHeight);
+        int frameRate = Common.DEFAULT_VIDEO_FPS;
 
-    private ArrayList<String> getCodecs(MediaFormat format){
-        Log.d(TAG, "getCodecs() called with: format = [" + format + "]");
-        // find all the available decoders for this format
-        ArrayList<String> matchingCodecs = new ArrayList<String>();
-        String mime = format.getString(MediaFormat.KEY_MIME);
-        int numCodecs = MediaCodecList.getCodecCount();
-        for (int i = 0; i < numCodecs; i++) {
-            MediaCodecInfo info = MediaCodecList.getCodecInfoAt(i);
-            if (!info.isEncoder()) {
-                continue;
-            }
-            try {
-                MediaCodecInfo.CodecCapabilities caps = info.getCapabilitiesForType(mime);
-                Log.w(TAG, "getCodecs: "+info.getName() );
-                if (caps != null) {
-                    matchingCodecs.add(info.getName());
-                }
-            } catch (IllegalArgumentException e) {
-                // type is not supported
-                //Log.e(TAG, "getCodecs: ",e );
-            }
+        format.setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface);
+        //format.setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420Planar);
+        format.setInteger(MediaFormat.KEY_BIT_RATE, mSelectedBitrate);
+        format.setInteger(MediaFormat.KEY_FRAME_RATE, frameRate);
+        format.setInteger(MediaFormat.KEY_CAPTURE_RATE, frameRate);
+        format.setInteger(MediaFormat.KEY_REPEAT_PREVIOUS_FRAME_AFTER, 1000000 / frameRate);
+        format.setInteger(MediaFormat.KEY_CHANNEL_COUNT, 1);
+        format.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 1); // 1 second between I-frames
+
+        try {
+            //mVideoEncoder = MediaCodec.createEncoderByType(MEDIA_FORMAT_MIMETYPE);
+            mVideoEncoder = MediaCodec.createByCodecName(Utils.getEncoderName(format));
+            mVideoEncoder.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
+            mInputSurface = mVideoEncoder.createInputSurface();
+            mVideoEncoder.start();
+        } catch (IOException e) {
+            throw new RuntimeException(e);
         }
-        return matchingCodecs;
     }
 
     private boolean drainEncoder() {
@@ -526,7 +578,7 @@ public class CastService extends Service {
                     osw.write(String.format(HTTP_MESSAGE_TEMPLATE, mSelectedWidth, mSelectedHeight));
                     osw.flush();
                     mSocketOutputStream.flush();
-                    if (mSelectedFormat.equals(MediaFormat.MIMETYPE_VIDEO_AVC)) {
+                    /*if (mSelectedFormat.equals(MediaFormat.MIMETYPE_VIDEO_AVC)) {
                         if (mSelectedWidth == 1280 && mSelectedHeight == 720) {
                             mSocketOutputStream.write(H264_PREDEFINED_HEADER_1280x720);
                         } else if (mSelectedWidth == 800 && mSelectedHeight == 480) {
@@ -547,7 +599,7 @@ public class CastService extends Service {
                         mClientSocket.close();
                         mClientSocket = null;
                         mSocketOutputStream = null;
-                    }
+                    }*/
                     if (mSocketOutputStream != null) {
                         mHandler.post(mStartEncodingRunnable);
                     }

@@ -22,6 +22,9 @@ import android.media.MediaFormat;
  * Created by yschi on 2015/5/28.
  */
 public class Common {
+
+    public static final String DISPLAY_NAME = "DisplayCast";
+
     public static final int VIEWER_PORT = 53515;
 
     public static final int DISCOVER_PORT = 53515;
