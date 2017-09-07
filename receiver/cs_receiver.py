@@ -35,7 +35,7 @@ class MyTCPHandler(SocketServer.BaseRequestHandler):
     def handle(self):
         if SAVE_TO_FILE:
             f = open('video.raw', 'wb')
-        p = Popen(['gst-launch-1.0', 'fdsrc', '!', 'application/x-rtp,media=video,clock-rate=90000,encoding-name=H264', '!', 'rtpjitterbuffer latency=0', '!', 'rtph264depay', '!', 'h264parse config-interval=1 disable-passthrough=true', '!', 'avdec_h264  no-reorder=true', '!', 'ximagesink'], stdin=PIPE, stdout=PIPE)
+        p = Popen(['gst-launch-1.0', 'fdsrc', '!', '"application/x-rtp,media=video,clock-rate=90000,encoding-name=H264"', '!', 'rtpjitterbuffer latency=0', '!', 'rtph264depay', '!', 'h264parse config-interval=1 disable-passthrough=true', '!', 'avdec_h264', '!', 'autovideosink'], stdin=PIPE, stdout=PIPE)
         #p = Popen(['ffplay', '-framerate', '25', '-'], stdin=PIPE, stdout=PIPE)
         #p = Popen(['vlc','-vvv', ':demux=h264', '-'], stdin=PIPE, stdout=PIPE)
         #p = Popen(['gst-launch-1.0', 'fdsrc', '!', 'h264parse', '!', 'avdec_h264', '!', 'autovideosink'], stdin=PIPE, stdout=PIPE)
