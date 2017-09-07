@@ -2,17 +2,24 @@ gst-launch-1.0 udpsrc port=5005 ! \
 application/x-rtp,media=video,clock-rate=90000,encoding-name=H264 ! \
 rtpjitterbuffer latency-0 ! \
 rtph264depay ! h264parse config-interval=1 disable-passthrough=true ! \
-imxh264dec no-reorder=true ! \
+omxh264dec no-reorder=true ! \
 waylandsink
 
 
 
-gst-launch-1.0 udpsrc port=5005 ! \
+gst-launch-1.0 udpsrc port=5004 ! \
 application/x-rtp,media=video,clock-rate=90000,encoding-name=H264 ! \
 rtpjitterbuffer latency=0 ! \
 rtph264depay ! \
 h264parse config-interval=1 disable-passthrough=true ! \
-avdec_h264 no-reorder=true ! \
+avdec_h264 ! \
 ximagesink
 
-p = Popen(['gst-launch-1.0', 'fdsrc', '!', 'application/x-rtp,media=video,clock-rate=90000,encoding-name=H264', '!', 'rtpjitterbuffer latency=0', '!', 'rtph264depay', '!', 'h264parse config-interval=1 disable-passthrough=true', '!', 'avdec_h264  no-reorder=true', '!', 'ximagesink'], stdin=PIPE, stdout=PIPE)
+
+gst-launch-1.0 ximagesrc use-damage=false xname=name ! videoconvert ! videoscale ! video/x-raw,width=800,height=600 ! \
+x264enc pass=qual quantizer=20 tune=zerolatency ! rtph264pay ! multiudpsink clients=127.0.0.1:5004,172.22.89.25:5004
+
+
+
+
+p = Popen(['gst-launch-1.0', 'fdsrc', '!', '"application/x-rtp,media=video,clock-rate=90000,encoding-name=H264"', '!', 'rtpjitterbuffer latency=0', '!', 'rtph264depay', '!', 'h264parse config-interval=1 disable-passthrough=true', '!', 'avdec_h264', '!', 'autovideosink'], stdin=PIPE, stdout=PIPE)
