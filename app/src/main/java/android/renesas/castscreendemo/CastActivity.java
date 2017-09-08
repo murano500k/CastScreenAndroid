@@ -21,7 +21,7 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.ServiceConnection;
-import android.media.MediaFormat;
+import android.hardware.display.DisplayManager;
 import android.media.projection.MediaProjectionManager;
 import android.os.AsyncTask;
 import android.os.Bundle;
@@ -31,13 +31,12 @@ import android.os.Message;
 import android.os.Messenger;
 import android.os.RemoteException;
 import android.util.Log;
+import android.view.Display;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
-import android.widget.Button;
-import android.widget.EditText;
 import android.widget.ListView;
 import android.widget.Spinner;
 import android.widget.TextView;
@@ -51,24 +50,25 @@ import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.SocketException;
 import java.net.SocketTimeoutException;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 
+import static android.renesas.castscreendemo.Config.VIRTUAL_DISPLAY_TYPE_PRESENTATION;
+import static android.renesas.castscreendemo.Config.VIRTUAL_DISPLAY_TYPE_SCREENCAST;
 
-public class CastActivity extends Activity {
+
+public class CastActivity extends Activity implements DisplayManager.DisplayListener {
     private static final String TAG = "CastActivity";
 
     private static final String PREF_COMMON = "common";
-    private static final String PREF_KEY_INPUT_RECEIVER = "input_receiver";
-    private static final String PREF_KEY_FORMAT = "format";
+    private static final String PREF_KEY_PACKAGE_NAME = "input_receiver";
+    private static final String PREF_KEY_ENCODER = "encoder";
     private static final String PREF_KEY_RECEIVER = "receiver";
     private static final String PREF_KEY_RESOLUTION = "resolution";
     private static final String PREF_KEY_BITRATE = "bitrate";
+    private static final String PREF_KEY_DISPLAY_MODE = "display_mode";
 
-    private static final String[] FORMAT_OPTIONS = {
-            MediaFormat.MIMETYPE_VIDEO_AVC,
-            MediaFormat.MIMETYPE_VIDEO_VP8
-    };
 
     private static final int[][] RESOLUTION_OPTIONS = {
             {1280, 720, 320},
@@ -82,9 +82,16 @@ public class CastActivity extends Activity {
             1024000 // 1 Mbps
     };
 
+    private static final int[] DISPLAY_MODE_OPTIONS = {
+            VIRTUAL_DISPLAY_TYPE_SCREENCAST,
+            VIRTUAL_DISPLAY_TYPE_PRESENTATION
+    };
+
+
     private static final int REQUEST_MEDIA_PROJECTION = 100;
     private static final String STATE_RESULT_CODE = "result_code";
     private static final String STATE_RESULT_DATA = "result_data";
+    private static final int REQUEST_VD_INTENT = 654;
 
     private Context mContext;
     private MediaProjectionManager mMediaProjectionManager;
@@ -95,15 +102,51 @@ public class CastActivity extends Activity {
     private ListView mDiscoverListView;
     private ArrayAdapter<String> mDiscoverAdapter;
     private HashMap<String, String> mDiscoverdMap;
-    private String mSelectedFormat = FORMAT_OPTIONS[0];
+    private String mSelectedFormat = Config.DEFAULT_VIDEO_FORMAT;
     private int mSelectedWidth = RESOLUTION_OPTIONS[0][0];
     private int mSelectedHeight = RESOLUTION_OPTIONS[0][1];
     private int mSelectedDpi = RESOLUTION_OPTIONS[0][2];
     private int mSelectedBitrate = BITRATE_OPTIONS[0];
+    private int mSelectedDisplayMode = DISPLAY_MODE_OPTIONS[0];
+    private String mSelectedEncoderName;
     private String mReceiverIp = "";
     private DiscoveryTask mDiscoveryTask;
     private int mResultCode;
     private Intent mResultData;
+    private ArrayList<String> mMatchingEncoders;
+    private VDCallback callback;
+    private boolean isConnected=false;
+    private DisplayManager mDisplayManager;
+    private ListView mDisplayListView;
+    private ArrayAdapter<String> mDisplayAdapter;
+    private HashMap<String, String> mDisplayMap;
+
+    @Override
+    public void onDisplayAdded(int i) {
+        updateDisplaysList();
+
+    }
+
+    @Override
+    public void onDisplayRemoved(int i) {
+        updateDisplaysList();
+    }
+
+    @Override
+    public void onDisplayChanged(int i) {
+        updateDisplaysList();
+    }
+
+    private void updateDisplaysList(){
+        ArrayList<String> list=new ArrayList<>();
+        for(Display d: mDisplayManager.getDisplays()){
+            list.add("id: "+d.getDisplayId()+", " +d.getName()+", state="+d.getState()+" flags="+d.getFlags());
+        }
+        mDisplayAdapter.clear();
+        mDisplayAdapter.addAll(list);
+        mDisplayAdapter.notifyDataSetChanged();
+    }
+
 
     private class HandlerCallback implements Handler.Callback {
         public boolean handleMessage(Message msg) {
@@ -115,23 +158,30 @@ public class CastActivity extends Activity {
     private ServiceConnection mServiceConnection = new ServiceConnection() {
         @Override
         public void onServiceConnected(ComponentName name, IBinder service) {
-            Log.d(TAG, "Service connected, name: " + name);
+            Log.w(TAG, "Service connected, name: " + name);
             mServiceMessenger = new Messenger(service);
             try {
-                Message msg = Message.obtain(null, Common.MSG_REGISTER_CLIENT);
+                Message msg = Message.obtain(null, Config.MSG_REGISTER_CLIENT);
                 msg.replyTo = mMessenger;
                 mServiceMessenger.send(msg);
                 Log.d(TAG, "Connected to service, send register client back");
+                isConnected=true;
+
             } catch (RemoteException e) {
                 Log.d(TAG, "Failed to send message back to service, e: " + e.toString());
                 e.printStackTrace();
+                isConnected=false;
+            }finally {
+                updateReceiverStatus();
             }
         }
 
         @Override
         public void onServiceDisconnected(ComponentName name) {
-            Log.d(TAG, "Service disconnected, name: " + name);
+            Log.w(TAG, "Service disconnected, name: " + name);
             mServiceMessenger = null;
+            isConnected=false;
+            updateReceiverStatus();
         }
     };
 
@@ -148,7 +198,7 @@ public class CastActivity extends Activity {
 
         mContext = this;
         mMediaProjectionManager = (MediaProjectionManager) getSystemService(Context.MEDIA_PROJECTION_SERVICE);
-
+        mDisplayManager= (DisplayManager) getSystemService(DISPLAY_SERVICE);
         mDiscoverdMap = new HashMap<>();
         mDiscoverListView = (ListView) findViewById(R.id.discover_listview);
         mDiscoverAdapter = new ArrayAdapter<>(this,
@@ -163,7 +213,7 @@ public class CastActivity extends Activity {
                 Log.d(TAG, "Select receiver name: " + name + ", ip: " + ip);
                 mReceiverIp = ip;
                 updateReceiverStatus();
-                mContext.getSharedPreferences(PREF_COMMON, 0).edit().putString(PREF_KEY_RECEIVER, mReceiverIp).commit();
+                mContext.getSharedPreferences(PREF_COMMON, 0).edit().putString(PREF_KEY_RECEIVER, mReceiverIp).apply();
             }
         });
 
@@ -171,42 +221,28 @@ public class CastActivity extends Activity {
         mDiscoverAdapter.add(mContext.getString(R.string.server_mode));
         mDiscoverdMap.put(mContext.getString(R.string.server_mode), "");
 
+        mDisplayListView = (ListView) findViewById(R.id.display_listview);
+        mDisplayAdapter = new ArrayAdapter<>(this,
+                android.R.layout.simple_list_item_1);
+        mDisplayListView.setAdapter(mDisplayAdapter);
+
+
         mReceiverTextView = (TextView) findViewById(R.id.receiver_textview);
-        final EditText ipEditText = (EditText) findViewById(R.id.ip_edittext);
-        final Button selectButton = (Button) findViewById(R.id.select_button);
+        /*final Button selectButton = (Button) findViewById(R.id.select_button);
         selectButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
-                if (ipEditText.getText().length() > 0) {
-                    mReceiverIp = ipEditText.getText().toString();
+                if (packageNameEditText.getText().length() > 0) {
+                    mReceiverIp = packageNameEditText.getText().toString();
                     Log.d(TAG, "Using ip: " + mReceiverIp);
                     updateReceiverStatus();
-                    mContext.getSharedPreferences(PREF_COMMON, 0).edit().putString(PREF_KEY_INPUT_RECEIVER, mReceiverIp).commit();
-                    mContext.getSharedPreferences(PREF_COMMON, 0).edit().putString(PREF_KEY_RECEIVER, mReceiverIp).commit();
+                    mContext.getSharedPreferences(PREF_COMMON, 0).edit().putString(PREF_KEY_PACKAGE_NAME, mReceiverIp).apply();
+                    mContext.getSharedPreferences(PREF_COMMON, 0).edit().putString(PREF_KEY_RECEIVER, mReceiverIp).apply();
                 }
             }
-        });
-        ipEditText.setText(mContext.getSharedPreferences(PREF_COMMON, 0).getString(PREF_KEY_INPUT_RECEIVER, ""));
+        });*/
 
-        Spinner formatSpinner = (Spinner) findViewById(R.id.format_spinner);
-        ArrayAdapter<CharSequence> formatAdapter = ArrayAdapter.createFromResource(this,
-                R.array.format_options, android.R.layout.simple_spinner_item);
-        formatAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
-        formatSpinner.setAdapter(formatAdapter);
-        formatSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
-            @Override
-            public void onItemSelected(AdapterView<?> adapterView, View view, int i, long l) {
-                mSelectedFormat = FORMAT_OPTIONS[i];
-                mContext.getSharedPreferences(PREF_COMMON, 0).edit().putInt(PREF_KEY_FORMAT, i).commit();
-            }
-
-            @Override
-            public void onNothingSelected(AdapterView<?> adapterView) {
-                mSelectedFormat = FORMAT_OPTIONS[0];
-                mContext.getSharedPreferences(PREF_COMMON, 0).edit().putInt(PREF_KEY_FORMAT, 0).commit();
-            }
-        });
-        formatSpinner.setSelection(mContext.getSharedPreferences(PREF_COMMON, 0).getInt(PREF_KEY_FORMAT, 0));
+        setupEncoderSpinner();
 
         Spinner resolutionSpinner = (Spinner) findViewById(R.id.resolution_spinner);
         ArrayAdapter<CharSequence> resolutionAdapter = ArrayAdapter.createFromResource(this,
@@ -219,7 +255,7 @@ public class CastActivity extends Activity {
                 mSelectedWidth = RESOLUTION_OPTIONS[i][0];
                 mSelectedHeight = RESOLUTION_OPTIONS[i][1];
                 mSelectedDpi = RESOLUTION_OPTIONS[i][2];
-                mContext.getSharedPreferences(PREF_COMMON, 0).edit().putInt(PREF_KEY_RESOLUTION, i).commit();
+                mContext.getSharedPreferences(PREF_COMMON, 0).edit().putInt(PREF_KEY_RESOLUTION, i).apply();
             }
 
             @Override
@@ -227,7 +263,7 @@ public class CastActivity extends Activity {
                 mSelectedWidth = RESOLUTION_OPTIONS[0][0];
                 mSelectedHeight = RESOLUTION_OPTIONS[0][1];
                 mSelectedDpi = RESOLUTION_OPTIONS[0][2];
-                mContext.getSharedPreferences(PREF_COMMON, 0).edit().putInt(PREF_KEY_RESOLUTION, 0).commit();
+                mContext.getSharedPreferences(PREF_COMMON, 0).edit().putInt(PREF_KEY_RESOLUTION, 0).apply();
             }
         });
         resolutionSpinner.setSelection(mContext.getSharedPreferences(PREF_COMMON, 0).getInt(PREF_KEY_RESOLUTION, 0));
@@ -241,22 +277,73 @@ public class CastActivity extends Activity {
             @Override
             public void onItemSelected(AdapterView<?> adapterView, View view, int i, long l) {
                 mSelectedBitrate = BITRATE_OPTIONS[i];
-                mContext.getSharedPreferences(PREF_COMMON, 0).edit().putInt(PREF_KEY_BITRATE, i).commit();
+                mContext.getSharedPreferences(PREF_COMMON, 0).edit().putInt(PREF_KEY_BITRATE, i).apply();
             }
 
             @Override
             public void onNothingSelected(AdapterView<?> adapterView) {
                 mSelectedBitrate = BITRATE_OPTIONS[0];
-                mContext.getSharedPreferences(PREF_COMMON, 0).edit().putInt(PREF_KEY_BITRATE, 0).commit();
+                mContext.getSharedPreferences(PREF_COMMON, 0).edit().putInt(PREF_KEY_BITRATE, 0).apply();
             }
         });
         bitrateSpinner.setSelection(mContext.getSharedPreferences(PREF_COMMON, 0).getInt(PREF_KEY_BITRATE, 0));
-
+        setupDisplayModeSpinner();
 
 
         mReceiverIp = mContext.getSharedPreferences(PREF_COMMON, 0).getString(PREF_KEY_RECEIVER, "");
         updateReceiverStatus();
-        startService();
+        //startService();
+    }
+
+    private void setupDisplayModeSpinner(){
+        Spinner displayMode = (Spinner) findViewById(R.id.display_mode_spinner);
+        ArrayAdapter<CharSequence> bitrateAdapter = ArrayAdapter.createFromResource(this,
+                R.array.display_mode_options, android.R.layout.simple_spinner_item);
+        bitrateAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        displayMode.setAdapter(bitrateAdapter);
+        displayMode.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            @Override
+            public void onItemSelected(AdapterView<?> adapterView, View view, int i, long l) {
+                mSelectedDisplayMode = DISPLAY_MODE_OPTIONS[i];
+                mContext.getSharedPreferences(PREF_COMMON, 0).edit().putInt(PREF_KEY_DISPLAY_MODE, i).apply();
+            }
+
+            @Override
+            public void onNothingSelected(AdapterView<?> adapterView) {
+                mSelectedDisplayMode = DISPLAY_MODE_OPTIONS[0];
+                mContext.getSharedPreferences(PREF_COMMON, 0).edit().putInt(PREF_KEY_BITRATE, 0).apply();
+            }
+        });
+        //displayMode.setSelection(mContext.getSharedPreferences(PREF_COMMON, 0).getInt(PREF_KEY_DISPLAY_MODE, 0));
+        displayMode.setSelection(1);
+    }
+    private void setupEncoderSpinner(){
+        Spinner encoderSpinner = (Spinner) findViewById(R.id.encoder_spinner);
+
+        mMatchingEncoders=Utils.getCodecs(mSelectedFormat);
+        if(mMatchingEncoders==null || mMatchingEncoders.size()==0){
+            Log.e(TAG, "No matching encoders found");
+            return;
+        }
+
+        ArrayAdapter<String> encoderAdapter = new ArrayAdapter<>(this,
+                android.R.layout.simple_spinner_item,android.R.id.text1,  mMatchingEncoders);
+        encoderAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        encoderSpinner.setAdapter(encoderAdapter);
+        encoderSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            @Override
+            public void onItemSelected(AdapterView<?> adapterView, View view, int i, long l) {
+                mSelectedEncoderName = mMatchingEncoders.get(i);
+                mContext.getSharedPreferences(PREF_COMMON, 0).edit().putInt(PREF_KEY_ENCODER, i).apply();
+            }
+
+            @Override
+            public void onNothingSelected(AdapterView<?> adapterView) {
+                mSelectedEncoderName = mMatchingEncoders.get(0);
+                mContext.getSharedPreferences(PREF_COMMON, 0).edit().putInt(PREF_KEY_ENCODER, 0).apply();
+            }
+        });
+        encoderSpinner.setSelection(mContext.getSharedPreferences(PREF_COMMON, 0).getInt(PREF_KEY_ENCODER, 0));
     }
 
     @Override
@@ -266,12 +353,15 @@ public class CastActivity extends Activity {
         // start discovery task
         mDiscoveryTask = new DiscoveryTask();
         mDiscoveryTask.execute();
+        mDisplayManager.registerDisplayListener(this, new Handler());
+
     }
 
     @Override
     public void onPause() {
         super.onPause();
         mDiscoveryTask.cancel(true);
+        mDisplayManager.unregisterDisplayListener(this);
     }
     @Override
     protected void onDestroy() {
@@ -281,34 +371,26 @@ public class CastActivity extends Activity {
 
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
-        // Inflate the menu; this adds items to the action bar if it is present.
         getMenuInflater().inflate(R.menu.menu_main, menu);
-        //if (mInputSurface != null) {
-        //    menu.findItem(R.id.action_start).setVisible(false);
-        //    menu.findItem(R.id.action_stop).setVisible(true);
-        //} else {
-        //    menu.findItem(R.id.action_start).setVisible(true);
-        //    menu.findItem(R.id.action_stop).setVisible(false);
-        //}
         return true;
     }
 
     @Override
     public boolean onOptionsItemSelected(MenuItem item) {
-        // Handle action bar item clicks here. The action bar will
-        // automatically handle clicks on the Home/Up button, so long
-        // as you specify a parent activity in AndroidManifest.xml.
         int id = item.getItemId();
 
         //noinspection SimplifiableIfStatement
         if (id == R.id.action_start) {
             Log.d(TAG, "==== start ====");
             if (mReceiverIp != null) {
+                isConnected=false;
                 startCaptureScreen();
                 //invalidateOptionsMenu();
             } else {
                 Toast.makeText(mContext, R.string.no_receiver, Toast.LENGTH_SHORT).show();
+                isConnected=false;
             }
+            updateReceiverStatus();
             return true;
         } else if (id == R.id.action_stop) {
             Log.d(TAG, "==== stop ====");
@@ -322,16 +404,19 @@ public class CastActivity extends Activity {
 
     @Override
     public void onActivityResult(int requestCode, int resultCode, Intent data) {
+        if (resultCode != Activity.RESULT_OK) {
+            Log.d(TAG, "User cancelled");
+            Toast.makeText(mContext, R.string.user_cancelled, Toast.LENGTH_SHORT).show();
+            return;
+        }
+        Log.d(TAG, "Starting screen capture");
+        mResultCode = resultCode;
+        mResultData = data;
         if (requestCode == REQUEST_MEDIA_PROJECTION) {
-            if (resultCode != Activity.RESULT_OK) {
-                Log.d(TAG, "User cancelled");
-                Toast.makeText(mContext, R.string.user_cancelled, Toast.LENGTH_SHORT).show();
-                return;
-            }
-            Log.d(TAG, "Starting screen capture");
-            mResultCode = resultCode;
-            mResultData = data;
+
             startCaptureScreen();
+        }else if(requestCode == REQUEST_VD_INTENT){
+            if(callback!=null) callback.intentMPReady(data,resultCode);
         }
     }
 
@@ -350,17 +435,49 @@ public class CastActivity extends Activity {
         } else {
             mReceiverTextView.setText(R.string.no_receiver);
         }
+        if(isConnected){
+            mReceiverTextView.setBackgroundColor(
+                    getColor(android.R.color.holo_green_light));
+        } else {
+            mReceiverTextView.setBackgroundColor(
+                    getColor(android.R.color.background_light));
+        }
+        updateDisplaysList();
     }
 
+
+
     private void startCaptureScreen() {
+        //if(mSelectedDisplayMode==Config.VIRTUAL_DISPLAY_TYPE_SCREENCAST){
+            Log.d(TAG, "startCaptureScreen: SCREENCAST");
+            if (mResultCode != 0 && mResultData != null) {
+                startService();
+            } else {
+                Log.d(TAG, "Requesting confirmation");
+                // This initiates a prompt dialog for the user to confirm screen projection.
+                startActivityForResult(
+                        mMediaProjectionManager.createScreenCaptureIntent(),
+                        REQUEST_MEDIA_PROJECTION);
+            }
+        //}else {
+            //Log.d(TAG, "startCaptureScreen: PRESENTATION");
+            //startService();
+        //}
+
+    }
+    public void getVirtualDisplayIntent(VDCallback callback){
+        this.callback=callback;
+        Log.d(TAG, "getVirtualDisplayIntent");
         if (mResultCode != 0 && mResultData != null) {
-            startService();
+            Log.w(TAG, "intentMPReady"+callback);
+
+            callback.intentMPReady(mResultData, mResultCode);
         } else {
             Log.d(TAG, "Requesting confirmation");
             // This initiates a prompt dialog for the user to confirm screen projection.
             startActivityForResult(
                     mMediaProjectionManager.createScreenCaptureIntent(),
-                    REQUEST_MEDIA_PROJECTION);
+                    REQUEST_VD_INTENT);
         }
     }
 
@@ -368,34 +485,33 @@ public class CastActivity extends Activity {
         if (mServiceMessenger == null) {
             return;
         }
-        final Intent stopCastIntent = new Intent(Common.ACTION_STOP_CAST);
+        final Intent stopCastIntent = new Intent(Config.ACTION_STOP_CAST);
         sendBroadcast(stopCastIntent);
-        /*
-        try {
-            Message msg = Message.obtain(null, Common.MSG_STOP_CAST);
-            mServiceMessenger.send(msg);
-        } catch (RemoteException e) {
-            Log.e(TAG, "Failed to send stop message to service");
-            e.printStackTrace();
-        }*/
+        doUnbindService();
+        isConnected=false;
+        updateReceiverStatus();
     }
 
     private void startService() {
-        if (mResultCode != 0 && mResultData != null && mReceiverIp != null) {
-            Intent intent = new Intent(this, CastService.class);
-            intent.putExtra(Common.EXTRA_RESULT_CODE, mResultCode);
-            intent.putExtra(Common.EXTRA_RESULT_DATA, mResultData);
-            intent.putExtra(Common.EXTRA_RECEIVER_IP, mReceiverIp);
-            intent.putExtra(Common.EXTRA_VIDEO_FORMAT, mSelectedFormat);
-            intent.putExtra(Common.EXTRA_SCREEN_WIDTH, mSelectedWidth);
-            intent.putExtra(Common.EXTRA_SCREEN_HEIGHT, mSelectedHeight);
-            intent.putExtra(Common.EXTRA_SCREEN_DPI, mSelectedDpi);
-            intent.putExtra(Common.EXTRA_VIDEO_BITRATE, mSelectedBitrate);
+        if (mReceiverIp != null) {
+            Intent intent = new Intent(this, MyCastService.class);
+            intent.putExtra(Config.EXTRA_RESULT_CODE, mResultCode);
+            intent.putExtra(Config.EXTRA_RESULT_DATA, mResultData);
+            intent.putExtra(Config.EXTRA_RECEIVER_IP, mReceiverIp);
+            intent.putExtra(Config.EXTRA_VIDEO_FORMAT, mSelectedFormat);
+            intent.putExtra(Config.EXTRA_SCREEN_WIDTH, mSelectedWidth);
+            intent.putExtra(Config.EXTRA_SCREEN_HEIGHT, mSelectedHeight);
+            intent.putExtra(Config.EXTRA_SCREEN_DPI, mSelectedDpi);
+            intent.putExtra(Config.EXTRA_VIDEO_BITRATE, mSelectedBitrate);
+            intent.putExtra(Config.EXTRA_VIRTUAL_DISPLAY_TYPE, mSelectedDisplayMode);
+            intent.putExtra(Config.EXTRA_VIDEO_ENCODER_NAME, mSelectedEncoderName);
+
+
             Log.d(TAG, "===== start service =====");
             startService(intent);
             bindService(intent, mServiceConnection, Context.BIND_AUTO_CREATE);
         } else {
-            Intent intent = new Intent(this, CastService.class);
+            Intent intent = new Intent(this, MyCastService.class);
             startService(intent);
             bindService(intent, mServiceConnection, Context.BIND_AUTO_CREATE);
         }
@@ -404,14 +520,17 @@ public class CastActivity extends Activity {
     private void doUnbindService() {
         if (mServiceMessenger != null) {
             try {
-                Message msg = Message.obtain(null, Common.MSG_UNREGISTER_CLIENT);
+                Message msg = Message.obtain(null, Config.MSG_UNREGISTER_CLIENT);
                 msg.replyTo = mMessenger;
                 mServiceMessenger.send(msg);
             } catch (RemoteException e) {
                 Log.d(TAG, "Failed to send unregister message to service, e: " + e.toString());
                 e.printStackTrace();
             }
-            unbindService(mServiceConnection);
+            /*if(mServiceConnection!=null) {
+                unbindService(mServiceConnection);
+                mServiceConnection=null;
+            }*/
         }
     }
 
@@ -424,7 +543,7 @@ public class CastActivity extends Activity {
                 discoverUdpSocket.setSoTimeout(3000);
                 byte[] buf = new byte[1024];
                 while (true) {
-                    if (!Utils.sendBroadcastMessage(mContext, discoverUdpSocket, Common.DISCOVER_PORT, Common.DISCOVER_MESSAGE)) {
+                    if (!Utils.sendBroadcastMessage(mContext, discoverUdpSocket, Config.DISCOVER_PORT, Config.DISCOVER_MESSAGE)) {
                         Log.w(TAG, "Failed to send discovery message");
                     }
                     Arrays.fill(buf, (byte)0);
@@ -432,14 +551,13 @@ public class CastActivity extends Activity {
                     try {
                         discoverUdpSocket.receive(receivePacket);
                         String ip = receivePacket.getAddress().getHostAddress();
-                        Log.d(TAG, "Receive discover response from " + ip + ", length: " + receivePacket.getLength());
+                        //Log.d(TAG, "Receive discover response from " + ip + ", length: " + receivePacket.getLength());
                         if (receivePacket.getLength() > 9) {
                             String respMsg = new String(receivePacket.getData());
                             //Log.d(TAG, "Discover response message: " + respMsg);
                             try {
                                 JSONObject json = new JSONObject(respMsg);
                                 String name = json.getString("name");
-                                //String id = json.getString("id");
                                 String width = json.getString("width");
                                 String height = json.getString("height");
                                 mDiscoverdMap.put(name, ip);
@@ -450,7 +568,7 @@ public class CastActivity extends Activity {
                                         mDiscoverAdapter.addAll(mDiscoverdMap.keySet());
                                     }
                                 });
-                                Log.d(TAG, "Got receiver name: " + name + ", ip: " + ip + ", width: " + width + ", height: " + height);
+                                //Log.d(TAG, "Got receiver name: " + name + ", ip: " + ip + ", width: " + width + ", height: " + height);
                             } catch (JSONException e) {
                                 e.printStackTrace();
                             }
@@ -464,11 +582,15 @@ public class CastActivity extends Activity {
                 Log.d(TAG, "Failed to create socket for discovery");
                 e.printStackTrace();
             } catch (IOException e) {
-                e.printStackTrace();
+                //e.printStackTrace();
             } catch (InterruptedException e) {
-                e.printStackTrace();
+                //e.printStackTrace();
+                //Log.w(TAG,"Interrupted exception");
             }
             return null;
         }
+    }
+    interface VDCallback {
+        void intentMPReady(Intent intent, int data);
     }
 }

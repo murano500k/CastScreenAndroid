@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">CastScreen</string>
+    <string name="app_name">CastScreen Renesas</string>
     <string name="select">Input Receiver</string>
     <string name="action_start">Start</string>
     <string name="action_stop">Stop</string>
@@ -12,9 +12,9 @@
 
     <string name="button_play">Play</string>
     <string name="button_stop">Stop</string>
-    <string-array name="format_options">
-        <item>H264</item>
-        <item>IVF</item>
+    <string-array name="display_mode_options">
+        <item>Cast current screen</item>
+        <item>Cast presentation</item>
     </string-array>
 
     <string-array name="resolution_options">

@@ -24,20 +24,26 @@ import select, socket
 import SocketServer
 
 HOST = ''
+REC_NAME = 'GSTReceiver'
 PORT = 53515
 IP = '172.22.89.45'
 
 bufferSize = 1024
-meta_data = '{"port":%d,"name":"PyReceiver @ %s","id":"%s","width":1280,"height":960,"mirror":"h264","audio":"pcm","subtitles":"text/vtt","proxyHeaders":true,"hls":false,"upsell":true}' % (PORT, IP, IP)
+meta_data = '{"port":%d,"name":"TestPyReceiver @ %s","id":"%s","width":1280,"height":960,"mirror":"h264","audio":"pcm","subtitles":"text/vtt","proxyHeaders":true,"hls":false,"upsell":true}' % (PORT, REC_NAME, IP)
 
 SAVE_TO_FILE = False
+
+
 class MyTCPHandler(SocketServer.BaseRequestHandler):
     def handle(self):
         if SAVE_TO_FILE:
-            f = open('video.raw', 'wb')
+            f = Popen('video.raw', 'wb')
         #p = Popen(['gst-launch-1.0 -v', 'fdsrc', '!','application/x-rtp,media=video,clock-rate=90000,encoding-name=H264', '!','rtpjitterbuffer latency=0', '!', 'rtph264depay', '!', 'h264parse config-interval=1 disable-passthrough=true', '!', 'avdec_h264', '!', 'ximagesink'], stdin=PIPE, stdout=PIPE)
-        #p = Popen(['ffplay', '-framerate', '25', '-'], stdin=PIPE, stdout=PIPE)
+        #p = Popen(['ffplay', '-framerate', '30', '-'], stdin=PIPE, stdout=PIPE)
         #p = Popen(['vlc','-vvv', ':demux=h264', '-'], stdin=PIPE, stdout=PIPE)
+        #p = Popen(['gst-launch-1.0', 'fdsrc', '!', 'h264parse', '!', 'avdec_h264', '!', 'autovideosink'], stdin=PIPE, stdout=PIPE)
+        #p = Popen(['ffplay', '-framerate', '30', '-'], stdin=PIPE, stdout=PIPE)
+        #p = Popen(['gst-launch-1.0', 'fdsrc', '!','application/x-rtp,media=video,clock-rate=90000,encoding-name=H264', '!', 'rtph264depay', '!', 'h264parse config-interval=1 disable-passthrough=true', '!', 'avdec_h264', '!', 'autovideosink'], stdin=PIPE, stdout=PIPE)
         p = Popen(['gst-launch-1.0', 'fdsrc', '!', 'h264parse', '!', 'avdec_h264', '!', 'autovideosink'], stdin=PIPE, stdout=PIPE)
         skiped_metadata = False
         while True:
@@ -51,15 +57,15 @@ class MyTCPHandler(SocketServer.BaseRequestHandler):
                     print 'Recv control data: ', data[0:last_ctrl]
                     if len(data) > last_ctrl:
                         p.stdin.write(data[last_ctrl:])
-	                if SAVE_TO_FILE:
+                        if SAVE_TO_FILE:
                             f.write(data[last_ctrl:])
                 skiped_metadata = True
             else:
                 p.stdin.write(data)
-	        if SAVE_TO_FILE:
+                if SAVE_TO_FILE:
                     f.write(data)
         p.kill()
-	if SAVE_TO_FILE:
+        if SAVE_TO_FILE:
             f.close()
 
 def resp_hello(ip, port):
