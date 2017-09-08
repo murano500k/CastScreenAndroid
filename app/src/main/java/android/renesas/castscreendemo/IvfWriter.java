@@ -18,7 +18,6 @@ package android.renesas.castscreendemo;
 
 import java.io.IOException;
 import java.io.OutputStream;
-import java.io.RandomAccessFile;
 
 /**
  * Writes an IVF file.
@@ -44,7 +43,6 @@ public class IvfWriter {
      * Timestamp values supplied while writing frames should be in accordance
      * with this timebase value.
      *
-     * @param filename   name of the IVF file
      * @param width      frame width
      * @param height     frame height
      * @param scale      timebase scale (or numerator of the timebase fraction)
@@ -69,7 +67,6 @@ public class IvfWriter {
      *
      * Microsecond timebase is default for OMX thus stagefright.
      *
-     * @param filename   name of the IVF file
      * @param width      frame width
      * @param height     frame height
      */

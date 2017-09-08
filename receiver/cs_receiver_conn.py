@@ -2,19 +2,7 @@
 
 """
  /*
- * Copyright (C) 2016 Jones Chi
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+  adb forward tcp:53516 tcp:53515
  */
 """
 
@@ -37,9 +25,10 @@ def connect_to_server():
         sock.sendall(message)
 
 	if SAVE_TO_FILE:
-            f = open('video_client.raw', 'wb')
-        p = Popen(['ffplay', '-framerate', '30', '-'], stdin=PIPE, stdout=PIPE)
-        #p = Popen(['gst-launch-1.0', 'fdsrc', '!', 'h264parse', '!', 'avdec_h264', '!', 'autovideosink'], stdin=PIPE, stdout=PIPE)
+
+            f = Popen('video_client.raw', 'wb')
+        #p = Popen(['ffplay', '-framerate', '30', '-'], stdin=PIPE, stdout=PIPE)
+        p = Popen(['gst-launch-1.0', 'fdsrc', '!', 'h264parse', '!', 'avdec_h264', '!', 'autovideosink'], stdin=PIPE, stdout=PIPE)
         skiped_metadata = False
         while True:
             data = sock.recv(bufferSize)

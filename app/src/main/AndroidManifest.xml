@@ -24,7 +24,7 @@
             </intent-filter>
         </activity>
         <service
-            android:name="android.renesas.castscreendemo.CastService"
+            android:name="android.renesas.castscreendemo.MyCastService"
             android:process=":remote"
             android:enabled="true"
             android:exported="true" >

@@ -19,7 +19,6 @@ package android.renesas.castscreendemo;
 import android.content.Context;
 import android.media.MediaCodecInfo;
 import android.media.MediaCodecList;
-import android.media.MediaFormat;
 import android.net.DhcpInfo;
 import android.net.wifi.WifiManager;
 import android.util.Log;
@@ -30,12 +29,8 @@ import java.net.DatagramSocket;
 import java.net.InetAddress;
 import java.util.ArrayList;
 
-import static android.content.ContentValues.TAG;
-
-/**
- * Created by yschi on 2015/5/27.
- */
 public class Utils {
+    private static final String TAG = "Utils";
     static public InetAddress getBroadcastAddress(Context context) throws IOException {
         WifiManager wifi = (WifiManager) context.getSystemService(Context.WIFI_SERVICE);
         DhcpInfo dhcp = wifi.getDhcpInfo();
@@ -52,7 +47,6 @@ public class Utils {
     }
 
     static public boolean sendBroadcastMessage(Context context, DatagramSocket socket, int port, String message) {
-
         try {
             InetAddress broadcastAddr = getBroadcastAddress(context);
             if (broadcastAddr == null) {
@@ -68,11 +62,10 @@ public class Utils {
         }
         return false;
     }
-    public static ArrayList<String> getCodecs(MediaFormat format){
-        Log.d(TAG, "getCodecs() called with: format = [" + format + "]");
+    public static ArrayList<String> getCodecs(String mime){
+        Log.d(TAG, "getCodecs() called with: format = [" + mime + "]");
         // find all the available decoders for this format
         ArrayList<String> matchingCodecs = new ArrayList<String>();
-        String mime = format.getString(MediaFormat.KEY_MIME);
         int numCodecs = MediaCodecList.getCodecCount();
         for (int i = 0; i < numCodecs; i++) {
             MediaCodecInfo info = MediaCodecList.getCodecInfoAt(i);
@@ -92,9 +85,9 @@ public class Utils {
         }
         return matchingCodecs;
     }
-    public static String getEncoderName(MediaFormat format){
+    public static String getEncoderName(String mime){
         String codecName="";
-        ArrayList<String> matchingCodecs = getCodecs(format);
+        ArrayList<String> matchingCodecs = getCodecs(mime);
         if (matchingCodecs.size() == 0) {
             Log.w(TAG, "no codecs for track ");
         }

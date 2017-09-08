@@ -18,10 +18,7 @@ package android.renesas.castscreendemo;
 
 import android.media.MediaFormat;
 
-/**
- * Created by yschi on 2015/5/28.
- */
-public class Common {
+public class Config {
 
     public static final String DISPLAY_NAME = "DisplayCast";
 
@@ -35,7 +32,7 @@ public class Common {
     public static final int DEFAULT_SCREEN_DPI = 320;
     public static final int DEFAULT_VIDEO_BITRATE = 6144000;
     public static final int DEFAULT_VIDEO_FPS = 25;
-    public static final String DEFAULT_VIDEO_MIME_TYPE = MediaFormat.MIMETYPE_VIDEO_AVC;
+    public static final String DEFAULT_VIDEO_FORMAT = MediaFormat.MIMETYPE_VIDEO_AVC;
 
     // Activity to service
     public static final int MSG_REGISTER_CLIENT = 200;
@@ -51,6 +48,7 @@ public class Common {
     public static final String EXTRA_SCREEN_DPI = "screen_dpi";
     public static final String EXTRA_VIDEO_FORMAT = "video_format";
     public static final String EXTRA_VIDEO_BITRATE = "video_bitrate";
+    public static final String EXTRA_VIDEO_ENCODER_NAME = "video_encodername";
 
     public static final String ACTION_STOP_CAST = "android.renesas.castscreendemo.ACTION_STOP_CAST";
 }

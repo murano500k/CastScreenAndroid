@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">CastScreen</string>
+    <string name="app_name">CastScreen Renesas</string>
     <string name="select">Input Receiver</string>
     <string name="action_start">Start</string>
     <string name="action_stop">Stop</string>
