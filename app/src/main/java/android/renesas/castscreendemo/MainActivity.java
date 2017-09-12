@@ -54,11 +54,12 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 
+import static android.renesas.castscreendemo.Config.EXTRA_RECEIVER_IP;
 import static android.renesas.castscreendemo.Config.VIRTUAL_DISPLAY_TYPE_PRESENTATION;
 import static android.renesas.castscreendemo.Config.VIRTUAL_DISPLAY_TYPE_SCREENCAST;
 
 
-public class CastActivity extends Activity implements DisplayManager.DisplayListener {
+public class MainActivity extends Activity implements DisplayManager.DisplayListener {
     private static final String TAG = "CastActivity";
 
     private static final String PREF_COMMON = "common";
@@ -191,7 +192,7 @@ public class CastActivity extends Activity implements DisplayManager.DisplayList
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_cast);
 
-        if (savedInstanceState != null) {
+        if (savedInstanceState != null && mServiceConnection!=null) {
             mResultCode = savedInstanceState.getInt(STATE_RESULT_CODE);
             mResultData = savedInstanceState.getParcelable(STATE_RESULT_DATA);
         }
@@ -263,10 +264,10 @@ public class CastActivity extends Activity implements DisplayManager.DisplayList
                 mSelectedWidth = RESOLUTION_OPTIONS[0][0];
                 mSelectedHeight = RESOLUTION_OPTIONS[0][1];
                 mSelectedDpi = RESOLUTION_OPTIONS[0][2];
-                mContext.getSharedPreferences(PREF_COMMON, 0).edit().putInt(PREF_KEY_RESOLUTION, 0).apply();
+                mContext.getSharedPreferences(PREF_COMMON, 0).edit().putInt(PREF_KEY_RESOLUTION, 1).apply();
             }
         });
-        resolutionSpinner.setSelection(mContext.getSharedPreferences(PREF_COMMON, 0).getInt(PREF_KEY_RESOLUTION, 0));
+        resolutionSpinner.setSelection(mContext.getSharedPreferences(PREF_COMMON, 0).getInt(PREF_KEY_RESOLUTION, 1));
 
         Spinner bitrateSpinner = (Spinner) findViewById(R.id.bitrate_spinner);
         ArrayAdapter<CharSequence> bitrateAdapter = ArrayAdapter.createFromResource(this,
@@ -286,13 +287,27 @@ public class CastActivity extends Activity implements DisplayManager.DisplayList
                 mContext.getSharedPreferences(PREF_COMMON, 0).edit().putInt(PREF_KEY_BITRATE, 0).apply();
             }
         });
-        bitrateSpinner.setSelection(mContext.getSharedPreferences(PREF_COMMON, 0).getInt(PREF_KEY_BITRATE, 0));
+        bitrateSpinner.setSelection(mContext.getSharedPreferences(PREF_COMMON, 0).getInt(PREF_KEY_BITRATE, 3));
         setupDisplayModeSpinner();
-
-
-        mReceiverIp = mContext.getSharedPreferences(PREF_COMMON, 0).getString(PREF_KEY_RECEIVER, "");
+        if(getIntent()!=null && getIntent().getStringExtra(EXTRA_RECEIVER_IP)!=null){
+            mReceiverIp = getIntent().getStringExtra(EXTRA_RECEIVER_IP);
+            startCaptureScreen();
+        }else {
+            mReceiverIp = mContext.getSharedPreferences(PREF_COMMON, 0).getString(PREF_KEY_RECEIVER, "");
+        }
         updateReceiverStatus();
-        //startService();
+
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        String receiverIp=intent.getStringExtra(EXTRA_RECEIVER_IP);
+        if(receiverIp!=null) {
+            mReceiverIp = receiverIp;
+            startCaptureScreen();
+            updateReceiverStatus();
+        }
     }
 
     private void setupDisplayModeSpinner(){

@@ -41,7 +41,7 @@ import static android.renesas.castscreendemo.Config.DEFAULT_VIDEO_BITRATE;
 import static android.renesas.castscreendemo.Config.DEFAULT_VIDEO_FORMAT;
 
 @RunWith(AndroidJUnit4.class)
-public class TestCastMaps implements CastActivity.VDCallback{
+public class TestCastMaps implements MainActivity.VDCallback{
     private static final String TAG = "TestCastMaps";
     Instrumentation instrumentation;
     private VirtualDisplay mVirtualDisplay;
@@ -54,8 +54,8 @@ public class TestCastMaps implements CastActivity.VDCallback{
     private Surface mInputSurface;
 
     @Rule
-    public ActivityTestRule<CastActivity> mActivityRule = new ActivityTestRule<>(
-            CastActivity.class);
+    public ActivityTestRule<MainActivity> mActivityRule = new ActivityTestRule<>(
+            MainActivity.class);
     private CountingIdlingResource idleResource;
 
     @Before
@@ -72,11 +72,11 @@ public class TestCastMaps implements CastActivity.VDCallback{
 
     @Test
     public void testCreateVirtualDisplayMP() {
-        CastActivity castActivity = (CastActivity) instrumentation.startActivitySync(
-                new Intent(instrumentation.getTargetContext(), CastActivity.class));
+        MainActivity mainActivity = (MainActivity) instrumentation.startActivitySync(
+                new Intent(instrumentation.getTargetContext(), MainActivity.class));
         Log.d(TAG, "testCreateVirtualDisplay() called");
         idleResource.increment();
-        castActivity.getVirtualDisplayIntent(this);
+        mainActivity.getVirtualDisplayIntent(this);
     }
     @RequiresApi(api = Build.VERSION_CODES.O)
     @Test
